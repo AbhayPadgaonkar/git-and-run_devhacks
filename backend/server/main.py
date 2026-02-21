@@ -62,6 +62,8 @@ class ExperimentConfig(BaseModel):
     trust_alpha: float = Field(default=0.8, ge=0.0, le=1.0)
     cluster_similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     initial_weights: Optional[str] = None  # Base64 encoded weights
+    max_staleness: int = Field(default=5, ge=0)  # Max allowed version staleness (0 = strict)
+    staleness_weighting: bool = Field(default=True)  # Reduce weight of stale updates
 
 
 class UpdateRequest(BaseModel):
@@ -77,6 +79,9 @@ class UpdateResponse(BaseModel):
     accepted: bool
     trust_score: float
     message: Optional[str] = None
+    new_global_version: Optional[int] = None  # Version after async aggregation
+    staleness: Optional[int] = None  # How many versions behind client was
+    staleness_weight: Optional[float] = None  # Weight applied due to staleness
 
 
 class GlobalModelResponse(BaseModel):
@@ -235,6 +240,10 @@ def submit_update(exp_id: str, update: UpdateRequest) -> UpdateResponse:
                 "last_updated": datetime.utcnow().isoformat()
             }
         
+        # Check staleness
+        current_global_version = global_models[exp_id][cluster_id]["version"]
+        staleness = current_global_version - update.model_version
+        
         # Add to pending updates
         update_data = {
             "update_id": update_id,
@@ -242,7 +251,9 @@ def submit_update(exp_id: str, update: UpdateRequest) -> UpdateResponse:
             "cluster_id": cluster_id,
             "delta_weights": delta_weights,
             "timestamp": datetime.utcnow().isoformat(),
-            "processed": False
+            "processed": False,
+            "base_version": update.model_version,  # Version client trained from
+            "staleness": staleness
         }
         
         pending_updates[exp_id].append(update_data)
@@ -259,7 +270,10 @@ def submit_update(exp_id: str, update: UpdateRequest) -> UpdateResponse:
             cluster_id=cluster_id,
             accepted=result["accepted"],
             trust_score=result["trust_score"],
-            message=result.get("message")
+            message=result.get("message"),
+            new_global_version=result.get("new_global_version"),
+            staleness=result.get("staleness"),
+            staleness_weight=result.get("staleness_weight")
         )
         
     except Exception as e:
@@ -268,11 +282,24 @@ def submit_update(exp_id: str, update: UpdateRequest) -> UpdateResponse:
 
 
 def _process_update(exp_id: str, update_data: Dict) -> Dict:
-    """Process a single update (malicious detection + aggregation)"""
+    """Process a single update (malicious detection + aggregation + staleness check)"""
     config = experiments[exp_id]["config"]
     cluster_id = update_data["cluster_id"]
     client_id = update_data["client_id"]
     delta_weights = update_data["delta_weights"]
+    staleness = update_data["staleness"]
+    
+    # Check staleness threshold
+    max_staleness = config.get("max_staleness", 5)
+    if staleness > max_staleness:
+        experiments[exp_id]["rejected_updates"] += 1
+        update_data["rejected"] = True
+        return {
+            "accepted": False,
+            "trust_score": 1.0,
+            "message": f"Rejected: Update too stale (staleness={staleness}, max={max_staleness})",
+            "staleness": staleness
+        }
     
     # Get all recent updates for this cluster (for detection)
     cluster_updates = [
@@ -309,22 +336,36 @@ def _process_update(exp_id: str, update_data: Dict) -> Dict:
     
     experiments[exp_id]["accepted_updates"] += 1
     
-    # Don't aggregate immediately - wait for manual trigger
-    # This allows collecting multiple updates before aggregation
-    # _aggregate_updates(exp_id, cluster_id)
+    # Calculate staleness weight (if enabled)
+    staleness_weight = 1.0
+    if config.get("staleness_weighting", True) and staleness > 0:
+        # Exponential decay: weight = 0.9^staleness
+        # staleness=1 → 0.9, staleness=2 → 0.81, staleness=3 → 0.73
+        staleness_weight = 0.9 ** staleness
+        update_data["staleness_weight"] = staleness_weight
     
-    # Mark as ready for aggregation (not yet processed)
-    update_data["aggregated"] = False
+    # ✨ ASYNC AGGREGATION - Aggregate immediately on each update
+    _aggregate_updates(exp_id, cluster_id)
+    
+    # Get the updated global model version
+    new_version = global_models[exp_id][cluster_id]["version"]
+    
+    message_parts = [f"Update accepted & aggregated. Global model updated to v{new_version}"]
+    if staleness > 0:
+        message_parts.append(f"(staleness={staleness}, weight={staleness_weight:.2f})")
     
     return {
         "accepted": True,
         "trust_score": trust_score,
-        "message": "Update accepted, awaiting aggregation"
+        "message": " ".join(message_parts),
+        "new_global_version": new_version,
+        "staleness": staleness,
+        "staleness_weight": staleness_weight
     }
 
 
 def _aggregate_updates(exp_id: str, cluster_id: str):
-    """Aggregate all pending updates for a cluster"""
+    """Aggregate all pending updates for a cluster (with staleness weighting)"""
     config = experiments[exp_id]["config"]
     
     # Get accepted updates for this cluster that haven't been aggregated yet
@@ -341,6 +382,17 @@ def _aggregate_updates(exp_id: str, cluster_id: str):
     # Extract delta weights and client IDs
     deltas = [u["delta_weights"] for u in cluster_updates]
     client_ids = [u["client_id"] for u in cluster_updates]
+    
+    # Apply staleness weighting if enabled
+    if config.get("staleness_weighting", True):
+        staleness_weights = [u.get("staleness_weight", 1.0) for u in cluster_updates]
+        # Weight deltas by staleness
+        weighted_deltas = []
+        for delta, sw in zip(deltas, staleness_weights):
+            weighted_delta = {k: v * sw for k, v in delta.items()}
+            weighted_deltas.append(weighted_delta)
+        deltas = weighted_deltas
+        logger.info(f"Applied staleness weights: {staleness_weights}")
     
     # Select aggregator
     aggregator_type = config["aggregation_method"]
