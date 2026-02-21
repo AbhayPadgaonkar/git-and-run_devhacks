@@ -22,7 +22,10 @@ def flatten_weights(weights: Dict[str, np.ndarray]) -> np.ndarray:
     """Flatten nested weight dictionary to single vector"""
     flattened = []
     for key in sorted(weights.keys()):  # Sort for consistency
-        flattened.append(weights[key].flatten())
+        weight_val = weights[key]
+        # Convert to numpy array if it's a list
+        weight_arr = np.array(weight_val) if isinstance(weight_val, (list, tuple)) else weight_val
+        flattened.append(weight_arr.flatten())
     return np.concatenate(flattened)
 
 
