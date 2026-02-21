@@ -1,20 +1,21 @@
 # 📊 FederX Project Status
 
 **Last Updated:** February 22, 2026  
-**Current Version:** v2.1  
+**Current Version:** v2.2  
 **Status:** ✅ Production Ready & Fully Tested
 
 ---
 
-## 🚀 Latest Version: v2.1 - LLM Support
+## 🚀 Latest Version: v2.2 - Admin Review & Feedback System
 
 ### Version History
 
-| Version  | Release Date | Status    | Key Features                              |
-| -------- | ------------ | --------- | ----------------------------------------- |
-| **v2.1** | Feb 22, 2026 | ✅ Active | LoRA adapter for LLMs, Weight compression |
-| **v2.0** | Feb 21, 2026 | ✅ Active | Async aggregation, Staleness handling     |
-| **v1.0** | Feb 20, 2026 | ✅ Active | Multi-framework FL, Trust scoring         |
+| Version  | Release Date | Status    | Key Features                                  |
+| -------- | ------------ | --------- | --------------------------------------------- |
+| **v2.2** | Feb 22, 2026 | ✅ Active | Admin review, Quality control, Client feedback|
+| **v2.1** | Feb 22, 2026 | ✅ Active | LoRA adapter for LLMs, Weight compression     |
+| **v2.0** | Feb 21, 2026 | ✅ Active | Async aggregation, Staleness handling         |
+| **v1.0** | Feb 20, 2026 | ✅ Active | Multi-framework FL, Trust scoring             |
 
 ---
 
@@ -39,9 +40,24 @@
 - [x] **13-400x Compression** - Massive reduction in communication overhead
 - [x] **Transformer Compatible** - Works with GPT-2, BERT, LLaMA, all Hugging Face models
 
+### ✅ Admin Review & Feedback System (v2.2)
+
+- [x] **Manual Admin Review** - Approve, reject, or request improvements
+- [x] **Auto-Approval** - Automatically approve trusted clients (≥ 0.8 trust)
+- [x] **Auto-Rejection** - Automatically reject low-trust clients (< 0.3 trust)
+- [x] **Review Statuses** - PENDING_REVIEW, APPROVED, REJECTED, NEEDS_IMPROVEMENT, AUTO_APPROVED
+- [x] **Client Feedback API** - Clients can fetch review feedback
+- [x] **Improvement Suggestions** - Admins can provide actionable suggestions
+- [x] **Pending Review Queue** - Admins can list all updates awaiting review
+- [x] **Configurable Per Experiment** - Each experiment can have different review settings
+- [x] **Aggregation Integration** - Only approved updates are aggregated into global model
+
 ### ✅ Infrastructure
 
-- [x] **REST API** - 7 endpoints (FastAPI)
+- [x] **REST API** - 11 endpoints (FastAPI)
+  - 3 Admin review endpoints (pending reviews, submit review, check status)
+  - 2 Client feedback endpoints (get feedback, get update feedback)
+  - 6 Core FL endpoints (experiment, update, global model, etc.)
 - [x] **CORS Enabled** - Ready for web frontend
 - [x] **Error Handling** - Comprehensive exception handling
 - [x] **Logging** - Detailed request/response logs
@@ -51,7 +67,7 @@
 
 ## 🧪 Test Results
 
-### Comprehensive Test Suite (22/22 passing - 100%)
+### Comprehensive Test Suite (28/28 passing - 100%)
 
 ```
 ✅ Server Health & Basic Endpoints (2 tests)
@@ -63,9 +79,16 @@
 ✅ Experiment Status & Monitoring (2 tests)
 ✅ Trust Scoring System (1 test)
 ✅ LoRA Adapter for LLMs (4 tests: injection, extraction, compression, roundtrip)
+✅ Admin Review & Feedback System (6 tests)
+  - Manual review workflow
+  - Auto-approval for trusted clients
+  - Needs improvement workflow
+  - Rejection workflow
+  - Mixed review mode
+  - Pending reviews listing
 ```
 
-**Pass Rate:** 100% (22/22)  
+**Pass Rate:** 100% (28/28)  
 **Test Coverage:** All critical features validated
 
 ---
@@ -167,14 +190,20 @@ T=21s:  Admin downloads final model v6
 
 ## 🔧 API Endpoints (All Working)
 
-| Endpoint                         | Method | Status | Purpose               |
-| -------------------------------- | ------ | ------ | --------------------- |
-| `/`                              | GET    | ✅     | Service info          |
-| `/health`                        | GET    | ✅     | Health check          |
-| `/experiment/create`             | POST   | ✅     | Create experiment     |
-| `/experiment/{id}/status`        | GET    | ✅     | Get experiment status |
-| `/experiment/{id}/global-model`  | GET    | ✅     | Download global model |
-| `/experiment/{id}/submit-update` | POST   | ✅     | Submit client update  |
+| Endpoint                                          | Method | Status | Purpose                       |
+| ------------------------------------------------- | ------ | ------ | ----------------------------- |
+| `/`                                               | GET    | ✅     | Service info                  |
+| `/health`                                         | GET    | ✅     | Health check                  |
+| `/experiment/create`                              | POST   | ✅     | Create experiment             |
+| `/experiment/{id}/status`                         | GET    | ✅     | Get experiment status         |
+| `/experiment/{id}/global-model`                   | GET    | ✅     | Download global model         |
+| `/experiment/{id}/submit-update`                  | POST   | ✅     | Submit client update          |
+| `/experiment/{id}/aggregate`                      | POST   | ✅     | Manual aggregation trigger    |
+| `/experiment/{id}/pending-reviews`                | GET    | ✅     | List updates awaiting review  |
+| `/experiment/{id}/update/{uid}/review`            | POST   | ✅     | Submit admin review           |
+| `/experiment/{id}/update/{uid}/review-status`     | GET    | ✅     | Check review status           |
+| `/experiment/{id}/client/{cid}/feedback`          | GET    | ✅     | Get all client feedback       |
+| `/experiment/{id}/update/{uid}/feedback`          | GET    | ✅     | Get update-specific feedback  |
 | `/docs`                          | GET    | ✅     | API documentation     |
 
 ---
@@ -239,9 +268,11 @@ T=21s:  Admin downloads final model v6
 5. ✅ **4 aggregation methods** - FedAvg, Median, Trimmed, Trust
 6. ✅ **LLM support** - LoRA adapters for GPT-2/BERT/LLaMA
 7. ✅ **Weight compression** - 54% space reduction
-8. ✅ **Complete API** - 7 REST endpoints, CORS enabled
-9. ✅ **Full test coverage** - 22/22 tests passing
-10. ✅ **Live demo** - Multi-client simulation working
+8. ✅ **Admin review system** - Quality control with auto-approval/rejection
+9. ✅ **Client feedback** - Actionable improvement suggestions
+10. ✅ **Complete API** - 11 REST endpoints, CORS enabled
+11. ✅ **Full test coverage** - 28/28 tests passing
+12. ✅ **Live demos** - Multi-client + Review system simulations
 
 ---
 
@@ -257,14 +288,14 @@ T=21s:  Admin downloads final model v6
 
 ## 🔮 Roadmap (Future Versions)
 
-### v2.2 - Persistence & Security (Planned)
+### v2.3 - Persistence & Security (Planned)
 
 - [ ] Firestore integration
 - [ ] Client authentication (API keys)
 - [ ] Model checkpointing
 - [ ] Resume interrupted training
 
-### v2.3 - Privacy & Optimization (Planned)
+### v2.4 - Privacy & Optimization (Planned)
 
 - [ ] Differential Privacy (DP-SGD)
 - [ ] Gradient compression (top-k sparsification)

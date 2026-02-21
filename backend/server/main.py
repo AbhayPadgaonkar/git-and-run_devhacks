@@ -21,6 +21,10 @@ from ..utils.serialization import (
     flatten_weights
 )
 from ..utils.logger import get_logger
+from ..models.review import (
+    ReviewStatus, AdminReviewRequest, AdminReviewResponse,
+    ClientFeedbackItem, PendingUpdateSummary, ExperimentReviewConfig
+)
 
 logger = get_logger(__name__)
 
@@ -51,6 +55,11 @@ trust_scorers: Dict[str, TrustScorer] = {}
 cluster_managers: Dict[str, ClusterManager] = {}
 malicious_detectors: Dict[str, MaliciousDetector] = {}
 
+# Review system storage
+update_reviews: Dict[str, Dict] = {}  # {update_id: review_data}
+pending_reviews: Dict[str, List[str]] = {}  # {exp_id: [update_ids]}
+experiment_review_configs: Dict[str, ExperimentReviewConfig] = {}  # {exp_id: config}
+
 
 # ============ Request/Response Models ============
 
@@ -64,6 +73,12 @@ class ExperimentConfig(BaseModel):
     initial_weights: Optional[str] = None  # Base64 encoded weights
     max_staleness: int = Field(default=5, ge=0)  # Max allowed version staleness (0 = strict)
     staleness_weighting: bool = Field(default=True)  # Reduce weight of stale updates
+    # Review system configuration
+    require_admin_review: bool = Field(default=False)  # Require admin review for all updates
+    auto_approve_trusted: bool = Field(default=True)  # Auto-approve high trust clients
+    auto_approve_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    auto_reject_low_trust: bool = Field(default=True)  # Auto-reject low trust clients
+    auto_reject_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
 class UpdateRequest(BaseModel):
@@ -82,6 +97,7 @@ class UpdateResponse(BaseModel):
     new_global_version: Optional[int] = None  # Version after async aggregation
     staleness: Optional[int] = None  # How many versions behind client was
     staleness_weight: Optional[float] = None  # Weight applied due to staleness
+    review_status: Optional[str] = None  # Review status (pending_review, approved, etc.)
 
 
 class GlobalModelResponse(BaseModel):
@@ -153,6 +169,16 @@ def create_experiment(config: ExperimentConfig):
         similarity_threshold=config.cluster_similarity_threshold
     )
     malicious_detectors[exp_id] = MaliciousDetector()
+    
+    # Initialize review system
+    pending_reviews[exp_id] = []
+    experiment_review_configs[exp_id] = ExperimentReviewConfig(
+        require_admin_review=config.require_admin_review,
+        auto_approve_trusted=config.auto_approve_trusted,
+        auto_approve_threshold=config.auto_approve_threshold,
+        auto_reject_low_trust=config.auto_reject_low_trust,
+        auto_reject_threshold=config.auto_reject_threshold
+    )
     
     logger.info(f"Created experiment {exp_id}: {config.name}")
     
@@ -273,7 +299,8 @@ def submit_update(exp_id: str, update: UpdateRequest) -> UpdateResponse:
             message=result.get("message"),
             new_global_version=result.get("new_global_version"),
             staleness=result.get("staleness"),
-            staleness_weight=result.get("staleness_weight")
+            staleness_weight=result.get("staleness_weight"),
+            review_status=result.get("review_status")
         )
         
     except Exception as e:
@@ -321,7 +348,7 @@ def _process_update(exp_id: str, update_data: Dict) -> Dict:
     trust_scorer.update_trust(client_id, is_malicious)
     trust_score = trust_scorer.get_trust(client_id)
     
-    # Accept or reject
+    # Accept or reject based on malicious detection
     accepted = not is_malicious
     
     if not accepted:
@@ -334,6 +361,106 @@ def _process_update(exp_id: str, update_data: Dict) -> Dict:
             "metrics": detection_metrics
         }
     
+    # ============ ADMIN REVIEW SYSTEM ============
+    review_config = experiment_review_configs[exp_id]
+    review_status = ReviewStatus.PENDING_REVIEW
+    review_message = ""
+    
+    # Auto-reject low trust clients
+    if review_config.auto_reject_low_trust and trust_score < review_config.auto_reject_threshold:
+        review_status = ReviewStatus.REJECTED
+        review_message = f"Auto-rejected: trust score {trust_score:.2f} < {review_config.auto_reject_threshold}"
+        experiments[exp_id]["rejected_updates"] += 1
+        update_data["rejected"] = True
+        update_data["review_status"] = review_status
+        
+        # Store review data
+        update_reviews[update_data["update_id"]] = {
+            "experiment_id": exp_id,
+            "update_id": update_data["update_id"],
+            "client_id": client_id,
+            "status": review_status,
+            "feedback": review_message,
+            "reviewed_at": datetime.utcnow().isoformat(),
+            "admin_id": "auto_system",
+            "trust_score": trust_score,
+            "aggregated": False
+        }
+        
+        return {
+            "accepted": False,
+            "trust_score": trust_score,
+            "message": review_message,
+            "review_status": review_status
+        }
+    
+    # Auto-approve high trust clients
+    if review_config.auto_approve_trusted and trust_score >= review_config.auto_approve_threshold:
+        review_status = ReviewStatus.AUTO_APPROVED
+        review_message = f"Auto-approved: trust score {trust_score:.2f} >= {review_config.auto_approve_threshold}"
+        update_data["review_status"] = review_status
+        
+        # Store review data
+        update_reviews[update_data["update_id"]] = {
+            "experiment_id": exp_id,
+            "update_id": update_data["update_id"],
+            "client_id": client_id,
+            "status": review_status,
+            "feedback": review_message,
+            "reviewed_at": datetime.utcnow().isoformat(),
+            "admin_id": "auto_system",
+            "trust_score": trust_score,
+            "aggregated": False  # Will be set to True after aggregation
+        }
+    
+    # Require manual review
+    elif review_config.require_admin_review:
+        review_status = ReviewStatus.PENDING_REVIEW
+        review_message = "Awaiting admin review"
+        update_data["review_status"] = review_status
+        pending_reviews[exp_id].append(update_data["update_id"])
+        
+        # Store review data
+        update_reviews[update_data["update_id"]] = {
+            "experiment_id": exp_id,
+            "update_id": update_data["update_id"],
+            "client_id": client_id,
+            "status": review_status,
+            "submitted_at": update_data["timestamp"],
+            "trust_score": trust_score,
+            "staleness": staleness,
+            "cluster_id": cluster_id,
+            "model_version": update_data["base_version"],
+            "aggregated": False
+        }
+        
+        return {
+            "accepted": True,
+            "trust_score": trust_score,
+            "message": review_message,
+            "review_status": review_status,
+            "staleness": staleness
+        }
+    
+    # No review required - auto approve
+    else:
+        review_status = ReviewStatus.AUTO_APPROVED
+        review_message = "Auto-approved: no review required"
+        update_data["review_status"] = review_status
+        
+        # Store review data
+        update_reviews[update_data["update_id"]] = {
+            "experiment_id": exp_id,
+            "update_id": update_data["update_id"],
+            "client_id": client_id,
+            "status": review_status,
+            "feedback": review_message,
+            "reviewed_at": datetime.utcnow().isoformat(),
+            "admin_id": "auto_system",
+            "trust_score": trust_score,
+            "aggregated": False
+        }
+    
     experiments[exp_id]["accepted_updates"] += 1
     
     # Calculate staleness weight (if enabled)
@@ -344,13 +471,20 @@ def _process_update(exp_id: str, update_data: Dict) -> Dict:
         staleness_weight = 0.9 ** staleness
         update_data["staleness_weight"] = staleness_weight
     
-    # ✨ ASYNC AGGREGATION - Aggregate immediately on each update
-    _aggregate_updates(exp_id, cluster_id)
+    # ✨ ASYNC AGGREGATION - Only aggregate if approved
+    if review_status in [ReviewStatus.APPROVED, ReviewStatus.AUTO_APPROVED]:
+        _aggregate_updates(exp_id, cluster_id)
+        
+        # Mark as aggregated in review
+        if update_data["update_id"] in update_reviews:
+            update_reviews[update_data["update_id"]]["aggregated"] = True
     
     # Get the updated global model version
     new_version = global_models[exp_id][cluster_id]["version"]
     
-    message_parts = [f"Update accepted & aggregated. Global model updated to v{new_version}"]
+    message_parts = [f"Update {review_status}"]
+    if review_status in [ReviewStatus.APPROVED, ReviewStatus.AUTO_APPROVED]:
+        message_parts.append(f"& aggregated. Global model updated to v{new_version}")
     if staleness > 0:
         message_parts.append(f"(staleness={staleness}, weight={staleness_weight:.2f})")
     
@@ -358,9 +492,10 @@ def _process_update(exp_id: str, update_data: Dict) -> Dict:
         "accepted": True,
         "trust_score": trust_score,
         "message": " ".join(message_parts),
-        "new_global_version": new_version,
+        "new_global_version": new_version if review_status in [ReviewStatus.APPROVED, ReviewStatus.AUTO_APPROVED] else None,
         "staleness": staleness,
-        "staleness_weight": staleness_weight
+        "staleness_weight": staleness_weight,
+        "review_status": review_status
     }
 
 
@@ -368,12 +503,13 @@ def _aggregate_updates(exp_id: str, cluster_id: str):
     """Aggregate all pending updates for a cluster (with staleness weighting)"""
     config = experiments[exp_id]["config"]
     
-    # Get accepted updates for this cluster that haven't been aggregated yet
+    # Get accepted and approved updates for this cluster that haven't been aggregated yet
     cluster_updates = [
         u for u in pending_updates[exp_id]
         if u["cluster_id"] == cluster_id 
         and not u.get("rejected", False)
         and not u.get("aggregated", False)
+        and u.get("review_status") in [ReviewStatus.APPROVED, ReviewStatus.AUTO_APPROVED]
     ]
     
     if not cluster_updates:
@@ -389,7 +525,15 @@ def _aggregate_updates(exp_id: str, cluster_id: str):
         # Weight deltas by staleness
         weighted_deltas = []
         for delta, sw in zip(deltas, staleness_weights):
-            weighted_delta = {k: v * sw for k, v in delta.items()}
+            # Convert to numpy arrays for multiplication, then back to lists/native types
+            weighted_delta = {}
+            for k, v in delta.items():
+                # Convert to numpy array if it's a list
+                v_arr = np.array(v) if isinstance(v, (list, tuple)) else v
+                # Multiply by staleness weight
+                weighted_arr = v_arr * sw
+                # Convert back to list if it was originally a list
+                weighted_delta[k] = weighted_arr.tolist() if isinstance(v, (list, tuple)) else weighted_arr
             weighted_deltas.append(weighted_delta)
         deltas = weighted_deltas
         logger.info(f"Applied staleness weights: {staleness_weights}")
@@ -425,10 +569,16 @@ def _aggregate_updates(exp_id: str, cluster_id: str):
         new_weights = aggregated_delta
     else:
         # Apply delta: theta_new = theta_old + delta
-        new_weights = {
-            key: current_weights[key] + aggregated_delta[key]
-            for key in aggregated_delta.keys()
-        }
+        new_weights = {}
+        for key in aggregated_delta.keys():
+            # Convert to numpy arrays for addition, then back to original type
+            curr = current_weights[key]
+            delta = aggregated_delta[key]
+            curr_arr = np.array(curr) if isinstance(curr, (list, tuple)) else curr
+            delta_arr = np.array(delta) if isinstance(delta, (list, tuple)) else delta
+            result_arr = curr_arr + delta_arr
+            new_weights[key] = result_arr.tolist() if isinstance(curr, (list, tuple)) else result_arr
+        
         # Debug: Check if weights changed
         old_norm = np.linalg.norm(flatten_weights(current_weights))
         new_norm = np.linalg.norm(flatten_weights(new_weights))
@@ -478,6 +628,173 @@ def trigger_aggregation(exp_id: str, cluster_id: str = "cluster_0"):
         "aggregated_updates": pending_count,
         "new_version": global_models[exp_id][cluster_id]["version"]
     }
+
+
+# ============ ADMIN REVIEW ENDPOINTS ============
+
+@app.get("/experiment/{exp_id}/pending-reviews")
+def get_pending_reviews(exp_id: str) -> List[PendingUpdateSummary]:
+    """Get all updates pending admin review"""
+    if exp_id not in experiments:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    pending_summaries = []
+    for update_id in pending_reviews.get(exp_id, []):
+        if update_id in update_reviews:
+            review = update_reviews[update_id]
+            # Find the update data
+            update_data = next(
+                (u for u in pending_updates[exp_id] if u["update_id"] == update_id),
+                None
+            )
+            
+            if update_data and review["status"] == ReviewStatus.PENDING_REVIEW:
+                pending_summaries.append(PendingUpdateSummary(
+                    update_id=update_id,
+                    experiment_id=exp_id,
+                    client_id=review["client_id"],
+                    submitted_at=review.get("submitted_at", datetime.utcnow().isoformat()),
+                    model_version=review.get("model_version", 0),
+                    cluster_id=review.get("cluster_id", "cluster_0"),
+                    staleness=review.get("staleness", 0),
+                    trust_score=review.get("trust_score", 1.0),
+                    num_samples=update_data.get("num_samples"),
+                    metadata=update_data.get("metadata")
+                ))
+    
+    return pending_summaries
+
+
+@app.post("/experiment/{exp_id}/update/{update_id}/review")
+def submit_admin_review(exp_id: str, update_id: str, review_request: AdminReviewRequest) -> AdminReviewResponse:
+    """Submit admin review for an update"""
+    if exp_id not in experiments:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    if update_id not in update_reviews:
+        raise HTTPException(status_code=404, detail="Update not found")
+    
+    review = update_reviews[update_id]
+    
+    # Update review status
+    review["status"] = review_request.status
+    review["feedback"] = review_request.feedback
+    review["reviewed_at"] = datetime.utcnow().isoformat()
+    review["admin_id"] = review_request.admin_id
+    review["suggestions"] = review_request.suggestions
+    
+    # Remove from pending if it was pending
+    if update_id in pending_reviews.get(exp_id, []):
+        pending_reviews[exp_id].remove(update_id)
+    
+    # If approved, trigger aggregation
+    will_aggregate = False
+    if review_request.status == ReviewStatus.APPROVED:
+        # Find the update data and mark it for aggregation
+        for update_data in pending_updates[exp_id]:
+            if update_data["update_id"] == update_id:
+                update_data["review_status"] = ReviewStatus.APPROVED
+                cluster_id = update_data["cluster_id"]
+                
+                # Trigger aggregation
+                _aggregate_updates(exp_id, cluster_id)
+                
+                # Mark as aggregated
+                review["aggregated"] = True
+                will_aggregate = True
+                break
+    
+    # If rejected or needs improvement, mark update accordingly
+    elif review_request.status in [ReviewStatus.REJECTED, ReviewStatus.NEEDS_IMPROVEMENT]:
+        for update_data in pending_updates[exp_id]:
+            if update_data["update_id"] == update_id:
+                update_data["review_status"] = review_request.status
+                if review_request.status == ReviewStatus.REJECTED:
+                    update_data["rejected"] = True
+                    experiments[exp_id]["rejected_updates"] += 1
+                break
+    
+    logger.info(f"Admin {review_request.admin_id} reviewed {update_id}: {review_request.status}")
+    
+    return AdminReviewResponse(
+        update_id=update_id,
+        review_status=review_request.status,
+        feedback=review_request.feedback,
+        reviewed_at=review["reviewed_at"],
+        will_aggregate=will_aggregate
+    )
+
+
+@app.get("/experiment/{exp_id}/update/{update_id}/review-status")
+def get_review_status(exp_id: str, update_id: str) -> Dict:
+    """Get review status for an update"""
+    if exp_id not in experiments:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    if update_id not in update_reviews:
+        raise HTTPException(status_code=404, detail="Update not found")
+    
+    review = update_reviews[update_id]
+    return {
+        "update_id": update_id,
+        "status": review["status"],
+        "feedback": review.get("feedback"),
+        "reviewed_at": review.get("reviewed_at"),
+        "admin_id": review.get("admin_id"),
+        "aggregated": review.get("aggregated", False)
+    }
+
+
+# ============ CLIENT FEEDBACK ENDPOINTS ============
+
+@app.get("/experiment/{exp_id}/client/{client_id}/feedback")
+def get_client_feedback(exp_id: str, client_id: str) -> List[ClientFeedbackItem]:
+    """Get all feedback for a specific client"""
+    if exp_id not in experiments:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    feedback_items = []
+    for update_id, review in update_reviews.items():
+        if review.get("experiment_id") == exp_id and review.get("client_id") == client_id:
+            feedback_items.append(ClientFeedbackItem(
+                update_id=update_id,
+                experiment_id=exp_id,
+                submitted_at=review.get("submitted_at", datetime.utcnow().isoformat()),
+                review_status=review["status"],
+                feedback=review.get("feedback"),
+                reviewed_at=review.get("reviewed_at"),
+                admin_id=review.get("admin_id"),
+                suggestions=review.get("suggestions"),
+                aggregated=review.get("aggregated", False)
+            ))
+    
+    # Sort by submitted_at (most recent first)
+    feedback_items.sort(key=lambda x: x.submitted_at, reverse=True)
+    return feedback_items
+
+
+@app.get("/experiment/{exp_id}/update/{update_id}/feedback")
+def get_update_feedback(exp_id: str, update_id: str) -> ClientFeedbackItem:
+    """Get feedback for a specific update"""
+    if exp_id not in experiments:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    if update_id not in update_reviews:
+        raise HTTPException(status_code=404, detail="Update not found or no review available")
+    
+    review = update_reviews[update_id]
+    
+    return ClientFeedbackItem(
+        update_id=update_id,
+        experiment_id=exp_id,
+        submitted_at=review.get("submitted_at", datetime.utcnow().isoformat()),
+        review_status=review["status"],
+        feedback=review.get("feedback"),
+        reviewed_at=review.get("reviewed_at"),
+        admin_id=review.get("admin_id"),
+        suggestions=review.get("suggestions"),
+        aggregated=review.get("aggregated", False)
+    )
 
 
 @app.get("/health")
