@@ -9,7 +9,7 @@ import {
 
 export default function SelectRole() {
   return (
-    <main className="relative min-h-screen bg-[#05020A] text-white flex flex-col items-center justify-center p-6 overflow-hidden selection:bg-purple-500 selection:text-white">
+    <main className="font-outfit relative min-h-screen bg-[#05020A] text-white flex flex-col items-center justify-center p-6 overflow-hidden selection:bg-purple-500 selection:text-white">
       
       {/* AMBIENT BACKGROUND GLOWS */}
       <div className="fixed inset-0 z-0 pointer-events-none">

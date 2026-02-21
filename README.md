@@ -1,11 +1,22 @@
 # FederX - Federated Learning Platform
 
-> Production-ready federated learning backend with trust-based aggregation, malicious detection, and multi-dataset support.
+> **Framework-agnostic** federated learning with trust-based aggregation, malicious detection, and production-ready architecture.
 
 **Status:** ✅ Production-ready for hackathon deployment  
 **Backend:** FastAPI + Python 3.12  
 **Testing:** MNIST (99.07% accuracy), CIFAR-10 (69.34% accuracy)  
-**Aggregation Methods:** 4 (FedAvg, Median, Trimmed Mean, Trust-Weighted)
+**Aggregation Methods:** 4 (FedAvg, Median, Trimmed Mean, Trust-Weighted)  
+**Frameworks Supported:** 🔥 PyTorch | 🧠 TensorFlow/Keras | 📐 Scikit-learn
+
+---
+
+## ✨ Key Features
+
+🎯 **Multi-Framework Support** - Use PyTorch, TensorFlow, or scikit-learn  
+🔒 **Trust-Based Security** - Malicious client detection & trust scoring  
+📊 **4 Aggregation Methods** - FedAvg, Median, Trimmed Mean, Trust-Weighted  
+⚡ **Production Ready** - FastAPI backend, tested on MNIST & CIFAR-10  
+🔌 **Easy Integration** - Simple client SDK with framework adapters
 
 ---
 
@@ -53,7 +64,59 @@ client.update_weights(new_weights, num_samples=len(local_data))
 
 ---
 
-## 🏗️ Architecture
+## � Multi-Framework Support
+
+FederX works with **any ML framework** - just swap the adapter!
+
+### PyTorch
+
+```python
+from federx_client.adapters.pytorch import PyTorchAdapter
+import torch.nn as nn
+
+model = nn.Sequential(nn.Linear(784, 128), nn.ReLU(), nn.Linear(128, 10))
+adapter = PyTorchAdapter()
+weights = adapter.get_weights(model)  # Extract weights
+adapter.set_weights(model, new_weights)  # Load weights
+```
+
+### TensorFlow/Keras
+
+```python
+from federx_client.adapters.tensorflow import TensorFlowAdapter
+from tensorflow import keras
+
+model = keras.Sequential([
+    keras.layers.Dense(128, activation='relu', input_shape=(784,)),
+    keras.layers.Dense(10, activation='softmax')
+])
+adapter = TensorFlowAdapter()
+weights = adapter.get_weights(model)
+adapter.set_weights(model, new_weights)
+```
+
+### Scikit-learn
+
+```python
+from federx_client.adapters.sklearn import SklearnAdapter
+from sklearn.neural_network import MLPClassifier
+
+model = MLPClassifier(hidden_layer_sizes=(128,))
+model.fit(X_train[:10], y_train[:10])  # Initialize
+adapter = SklearnAdapter()
+weights = adapter.get_weights(model)
+adapter.set_weights(model, new_weights)
+```
+
+**Test All Frameworks:**
+
+```bash
+python test_multi_framework.py
+```
+
+---
+
+## �🏗️ Architecture
 
 ### High-Level Overview
 
