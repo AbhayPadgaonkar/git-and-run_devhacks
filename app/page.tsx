@@ -1,9 +1,10 @@
-import Header from "./header/header";
+import HomePremiumGrid from "./landing_page/page"
 
-export default function Home() {
-  return (
-    <div className="bg-linear-30 from-10% to from-violet-100 to-violet-200 min-h-screen max-w-full">
-      <Header />
-    </div>
-  );
+export default function Home(){
+   return (
+      <div className="max-w-full min-h-screen">
+        <HomePremiumGrid />
+
+      </div>
+   )
 }
