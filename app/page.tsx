@@ -15,7 +15,7 @@ import {
 export default function HomeDark() {
   return (
     // 1. THEME: Deep Void Background
-    <main className="relative min-h-screen bg-[#05020A] text-white overflow-x-hidden selection:bg-purple-500 selection:text-white">
+    <main className="font-outfit relative min-h-screen bg-[#05020A] text-white overflow-x-hidden selection:bg-purple-500 selection:text-white">
       
       {/* 2. AMBIENT GRID & GLOWS */}
       <div className="fixed inset-0 z-0 pointer-events-none">
