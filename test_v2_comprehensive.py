@@ -459,6 +459,99 @@ except Exception as e:
     log_test("Trust scoring", False, f"Error: {e}")
 
 # ============================================================================
+# TEST 7: LoRA Adapter for LLMs
+# ============================================================================
+print("\n" + "="*80)
+print("🧬 TEST 7: LoRA Adapter for Efficient LLM Training")
+print("="*80)
+
+try:
+    from federx_client.adapters import LoRAAdapter
+    from federx_client.utils.serialization import get_compression_stats
+    import torch
+    import torch.nn as nn
+    
+    # Create a simple transformer-like model for testing
+    class SimpleTransformer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.q_proj = nn.Linear(128, 128)
+            self.k_proj = nn.Linear(128, 128)
+            self.v_proj = nn.Linear(128, 128)
+            self.o_proj = nn.Linear(128, 128)
+            self.fc = nn.Linear(128, 10)
+        
+        def forward(self, x):
+            q = self.q_proj(x)
+            k = self.k_proj(x)
+            v = self.v_proj(x)
+            out = self.o_proj(q + k + v)
+            return self.fc(out)
+    
+    base_model = SimpleTransformer()
+    
+    # Test 7a: LoRA injection
+    lora_adapter = LoRAAdapter(
+        rank=4,
+        alpha=8,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"]
+    )
+    num_lora_layers = lora_adapter.inject_lora(base_model, verbose=False)
+    
+    # Count LoRA layers
+    lora_layers = [name for name, param in base_model.named_parameters() 
+                   if 'lora_' in name]
+    
+    log_test("LoRA injection", num_lora_layers == 4,
+             f"Injected LoRA into 4 target modules (got {num_lora_layers})")
+    
+    # Test 7b: Weight extraction (LoRA-only)
+    lora_weights = lora_adapter.get_weights(base_model)
+    
+    # Should only contain LoRA parameters, not full model
+    # Each LoRA layer has A and B matrices
+    expected_params = 4 * 2  # 4 modules × 2 matrices (A, B)
+    
+    log_test("LoRA weight extraction", len(lora_weights) == expected_params,
+             f"Extracted {len(lora_weights)} LoRA parameters (not full model)")
+    
+    # Test 7c: Compression statistics
+    compression_stats = get_compression_stats(lora_weights)
+    
+    compressed_smaller = compression_stats["zlib_size"] < compression_stats["original_size"]
+    space_saved = compression_stats["space_saved_percent"]
+    
+    log_test("LoRA compression", compressed_smaller and space_saved > 0,
+             f"Compression: {compression_stats['compression_ratio']:.1f}x, "
+             f"{space_saved:.0f}% space saved")
+    
+    # Test 7d: Roundtrip (set/get weights)
+    lora_adapter.set_weights(base_model, lora_weights)
+    retrieved_weights = lora_adapter.get_weights(base_model)
+    
+    weights_match = all(
+        torch.allclose(torch.from_numpy(lora_weights[k]), torch.from_numpy(retrieved_weights[k]), rtol=1e-5)
+        for k in lora_weights.keys()
+    )
+    
+    log_test("LoRA roundtrip", weights_match,
+             "LoRA weights preserved through set/get cycle")
+    
+    # Demonstration: Show compression benefits
+    print("\n📦 LoRA Compression Demo:")
+    total_params = sum(p.numel() for p in base_model.parameters())
+    trainable_params = sum(p.numel() for p in base_model.parameters() if p.requires_grad)
+    print(f"   Total model parameters: {total_params:,}")
+    print(f"   LoRA trainable params: {trainable_params:,}")
+    print(f"   Compression ratio: {total_params / max(trainable_params, 1):.1f}x smaller")
+    print(f"   Transfer size: {compression_stats['zlib_size_mb']:.3f} MB")
+    
+except Exception as e:
+    log_test("LoRA adapter", False, f"Error: {e}")
+    import traceback
+    traceback.print_exc()
+
+# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 print("\n" + "="*80)
@@ -494,6 +587,7 @@ features = {
     "Staleness Weighting": "Staleness weighting" in test_results["passed"],
     "Staleness Rejection": "Staleness rejection" in test_results["passed"],
     "Trust Scoring": "Trust scoring" in test_results["passed"],
+    "LoRA for LLMs": "LoRA injection" in test_results["passed"],
     "API Endpoints": "Health endpoint" in test_results["passed"],
     "Experiment Management": "Experiment status endpoint" in test_results["passed"],
 }

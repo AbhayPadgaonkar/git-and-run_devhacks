@@ -13,3 +13,9 @@ try:
     __all__.append('SklearnAdapter')
 except ImportError:
     pass
+
+try:
+    from .lora import LoRAAdapter, LoRALayer
+    __all__.extend(['LoRAAdapter', 'LoRALayer'])
+except ImportError:
+    pass
