@@ -1,0 +1,14 @@
+# Client SDK (install from parent directory)
+# pip install -e .
+
+# ML Dependencies
+torch>=2.5.0
+torchvision>=0.20.0
+numpy>=1.26.0
+
+# HTTP
+requests>=2.32.0
+
+# For MNIST/CIFAR-10 examples
+matplotlib>=3.8.0
+tqdm>=4.66.0

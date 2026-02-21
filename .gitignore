@@ -39,3 +39,58 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python
+venv/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.egg-info/
+dist/
+build/
+.Python
+
+# Data & Datasets
+data/
+MNIST/
+CIFAR10/
+cifar-10-batches-py/
+*.csv
+*.pkl
+*.pickle
+
+# ML Models & Checkpoints
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pb
+checkpoints/
+models/
+saved_models/
+runs/
+
+# Logs
+*.log
+logs/
+tensorboard/
+wandb/
+
+# Test outputs
+test_results/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
