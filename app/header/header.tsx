@@ -19,7 +19,7 @@ import { Menu } from "lucide-react";
 import { Bell, FileUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-export default function Header() {
+export default function MainHeader() {
   //   if (user) {
   //     return (
   //       <header
@@ -140,7 +140,7 @@ export default function Header() {
   return (
     <header
       className="
-        fixed top-1 left-1/18 md:top-4 md:left-1/2 md:-translate-x-1/2 w-[75%] border border-border rounded-2xl 
+        fixed top-1 left-1/18 md:top-4 md:left-1/2 md:-translate-x-1/2 w-[65%] border border-border rounded-2xl 
         bg-background/20 backdrop-blur-xs 
         z-50 inset-ring-1 inset-ring-primary/60
       "

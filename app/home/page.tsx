@@ -132,7 +132,7 @@ export default function ProjectMenu() {
           projects.map((project) => (
             <Card
               key={project.id}
-              className="flex flex-col border-slate-200 shadow-sm hover:shadow-md max-h-full transition-shadow"
+              className="flex flex-col  border-slate-200 shadow-sm hover:shadow-md max-h-full transition-shadow"
             >
               <CardHeader className="pb-4">
                 <div className="flex justify-between items-start">
