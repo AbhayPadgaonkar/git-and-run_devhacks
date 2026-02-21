@@ -17,7 +17,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, AlertCircle, Sparkles } from "lucide-react"; // Added a placeholder logo icon
+import { Eye, EyeOff, AlertCircle, Sparkles } from "lucide-react";
 
 type formDataType = {
   email: string;
@@ -59,12 +59,29 @@ export default function LoginPage() {
     // Redirect to the Details Page
     router.push("/mainpages/dashboard");
   };
+  
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-12">
+    // 1. ADDED: relative and overflow-hidden to contain the background
+    <div className="relative min-h-screen flex flex-col items-center justify-center bg-background px-4 py-12 overflow-hidden">
+      
+      {/* ========================================================= */}
+      {/* 2. THE NEW BACKGROUND GRADIENTS & GRID (Highly Visible)   */}
+      {/* ========================================================= */}
+      
+      {/* Top Left Primary Glowing Orb */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-primary opacity-20 blur-[120px] rounded-full pointer-events-none" />
+      
+      {/* Bottom Right Secondary Glowing Orb */}
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-primary opacity-10 blur-[100px] rounded-full pointer-events-none" />
+      
+      {/* Enterprise Tech Grid Overlay */}
+      <div className="absolute inset-0 z-0 pointer-events-none bg-[linear-gradient(to_right,#80808020_1px,transparent_1px),linear-gradient(to_bottom,#80808020_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_60%,transparent_100%)]" />
+
+      {/* ========================================================= */}
+
       {/* Top Heading & Logo Section */}
-      <div className="flex flex-col items-center text-center mb-10">
+      <div className="relative z-10 flex flex-col items-center text-center mb-10">
         <div className="bg-primary/10 p-3 rounded-2xl mb-4 text-primary">
-          {/* Replace this Sparkles icon with your actual Logo/Image component */}
           <Sparkles className="w-10 h-10" />
         </div>
         <h1 className="text-3xl md:text-5xl font-bold text-foreground tracking-tight">
@@ -75,10 +92,11 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Main Content Wrapper */}
-      <div className="w-full max-w-5xl flex flex-col lg:flex-row items-stretch justify-center  rounded-2xl overflow-hidden shadow-xl border border-border  bg-muted/30">
+      {/* Main Content Wrapper (Added relative z-10 so it sits above the background) */}
+      <div className="relative z-10 w-full max-w-5xl flex flex-col lg:flex-row items-stretch justify-center rounded-2xl overflow-hidden shadow-2xl border border-border bg-card/50 backdrop-blur-xl">
+        
         {/* LEFT: Form Card */}
-        <Card className="w-full lg:w-1/2 p-6 md:p-10 bg-card border-none flex flex-col justify-center ">
+        <Card className="w-full lg:w-1/2 p-6 md:p-10 bg-transparent border-none flex flex-col justify-center">
           {otpLogin ? (
             <form className="flex flex-col w-full" onSubmit={handleSubmit}>
               {error && (
@@ -114,7 +132,7 @@ export default function LoginPage() {
                         onChange={handleChange}
                         required
                         type="email"
-                        className="bg-background border-border hover:bg-muted/50 transition-colors"
+                        className="bg-background/50 border-border hover:bg-muted/50 transition-colors"
                       />
                     </Field>
                   </div>
@@ -135,7 +153,7 @@ export default function LoginPage() {
                     )}
                   </Button>
                   <Button
-                    className="w-3/4 hover:bg-primary/5"
+                    className="w-3/4 hover:bg-primary/5 bg-background/50"
                     variant={"outline"}
                     onClick={() => setOtpLogin(false)}
                     disabled={isLoading}
@@ -194,7 +212,7 @@ export default function LoginPage() {
                         onChange={handleChange}
                         required
                         type="email"
-                        className="bg-background border-border hover:bg-muted/50 transition-colors"
+                        className="bg-background/50 border-border hover:bg-muted/50 transition-colors"
                       />
                     </Field>
 
@@ -211,7 +229,7 @@ export default function LoginPage() {
                           onChange={handleChange}
                           placeholder="Enter your Password"
                           required
-                          className="bg-background border-border hover:bg-muted/50 transition-colors pr-10"
+                          className="bg-background/50 border-border hover:bg-muted/50 transition-colors pr-10"
                         />
                         <button
                           type="button"
@@ -251,7 +269,7 @@ export default function LoginPage() {
                     )}
                   </Button>
                   <Button
-                    className="w-3/4 hover:bg-primary/5"
+                    className="w-3/4 hover:bg-primary/5 bg-background/50"
                     variant={"outline"}
                     onClick={() => setOtpLogin(true)}
                     disabled={isLoading}
@@ -281,7 +299,7 @@ export default function LoginPage() {
         </Card>
 
         {/* RIGHT: Image Container */}
-        <div className="w-full lg:w-1/2 relative min-h-[400px] lg:min-h-[500px]  overflow-hidden shadow-xl hidden md:block bg-muted/30">
+        <div className="w-full lg:w-1/2 relative min-h-[400px] lg:min-h-[500px] overflow-hidden shadow-xl hidden md:block">
           <Image
             src="/login.png"
             alt="Login Illustration"
