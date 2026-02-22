@@ -80,13 +80,10 @@ Request body:
 
 ```json
 {
-  "status": "approved",  // or "rejected", "needs_improvement"
+  "status": "approved", // or "rejected", "needs_improvement"
   "feedback": "Great update! High quality gradients.",
   "admin_id": "admin_alice",
-  "suggestions": [
-    "Add L2 regularization",
-    "Reduce learning rate"
-  ]
+  "suggestions": ["Add L2 regularization", "Reduce learning rate"]
 }
 ```
 
@@ -309,12 +306,12 @@ def _aggregate_updates(exp_id: str, cluster_id: str):
     # Filter for approved updates
     cluster_updates = [
         u for u in pending_updates[exp_id]
-        if u["cluster_id"] == cluster_id 
+        if u["cluster_id"] == cluster_id
         and not u.get("rejected", False)
         and not u.get("aggregated", False)
         and u.get("review_status") in [ReviewStatus.APPROVED, ReviewStatus.AUTO_APPROVED]
     ]
-    
+
     # Aggregate only approved updates
     # ...
 ```
