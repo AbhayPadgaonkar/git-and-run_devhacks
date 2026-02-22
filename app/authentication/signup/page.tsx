@@ -26,11 +26,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-// Database Imports
-import { auth, db } from "@/database/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-
 type formDataType = {
   firstName: string;
   lastName: string;
@@ -39,6 +34,11 @@ type formDataType = {
   confirmPassword: string;
   role: "admin" | "client";
 };
+
+// Add Firebase imports
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "@/app/lib/firebase"; // Adjust path if your lib is elsewhere
 
 export default function SignupPage() {
   const router = useRouter();
@@ -63,61 +63,51 @@ export default function SignupPage() {
     }));
   };
 
+  // NEW: Implementation of the missing handleSubmit function
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // Basic Validation
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // 1. Create user in Auth
-
-      if (formData.password !== formData.confirmPassword) {
-        setError("Passwords do not match. Please try again.");
-        setIsLoading(false);
-        return;
-      }
-
-      if (formData.password.length < 6) {
-        setError("Password must be at least 6 characters.");
-        setIsLoading(false);
-        return;
-      }
-
-
+      // 1. Create the user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(
         auth,
-        formData.email.trim(),
+        formData.email,
         formData.password,
       );
 
       const user = userCredential.user;
-      console.log("Auth User Created:", user.uid);
 
-      // 2. Save to Firestore
-      // Wrapping this in a try-catch specifically to see if DB is the bottleneck
-      try {
-        await setDoc(doc(db, "users", user.uid), {
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email.toLowerCase().trim(),
-          role: formData.role,
-          createdAt: new Date().toISOString(),
-        });
-        console.log("Firestore Profile Created");
-      } catch (dbError: any) {
-        console.error("Firestore Error:", dbError);
-        // We don't want to stop the user if DB fails, but we should know why
-        throw new Error(
-          "Account created, but profile setup failed. Please contact support.",
-        );
-      }
+      // 2. Save additional user details to Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        role: formData.role,
+        createdAt: new Date(),
+      });
 
-      // 3. Force Redirect
-      // Use window.location.href if router.push is being ignored by the middleware
-      window.location.href = "/home";
+      // 3. AuthContext will detect the login and automatically redirect,
+      // but we can add a manual push here as a fallback.
+      router.push("/");
     } catch (err: any) {
-      console.error("General Signup Error:", err.code, err.message);
-      setError(err.message);
+      console.error(err);
+      // Format Firebase error messages slightly better
+      if (err.code === "auth/email-already-in-use") {
+        setError("An account with this email already exists.");
+      } else if (err.code === "auth/weak-password") {
+        setError("Password should be at least 6 characters.");
+      } else {
+        setError(err.message || "Failed to create account. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }

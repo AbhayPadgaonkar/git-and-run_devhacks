@@ -110,7 +110,7 @@ const projects: projectProps[] | null = [
 
 export default function ProjectMenu() {
   return (
-    <div className="flex flex-col w-full max-w-7xl mt-16 mx-auto space-y-6">
+    <div className="flex flex-col w-full max-w-7xl mt-24 mx-auto space-y-6">
       {/* Page Header */}
       <div className="flex justify-between items-center w-full">
         <div>
