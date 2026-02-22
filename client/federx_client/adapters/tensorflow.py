@@ -33,8 +33,8 @@ class TensorFlowAdapter(BaseFLModel):
             layer_weights = layer.get_weights()
             if layer_weights:  # Skip layers without weights
                 for i, weight_array in enumerate(layer_weights):
-                    # Name format: layer_name/weight_0, layer_name/bias_0, etc.
-                    key = f"{layer.name}/weight_{i}"
+                    # Name format: layer_name_weight_0, layer_name_bias_0, etc. (no slashes for compatibility)
+                    key = f"{layer.name}_weight_{i}"
                     weights_dict[key] = weight_array.copy()  # Copy to prevent memory sharing
         return weights_dict
     
@@ -49,7 +49,14 @@ class TensorFlowAdapter(BaseFLModel):
         # Group weights by layer name
         layer_weights = {}
         for key, weight_array in weights.items():
-            layer_name = key.split('/')[0]
+            # Split on underscore and take first part as layer name
+            parts = key.split('_weight_')
+            if len(parts) == 2:
+                layer_name = parts[0]
+            else:
+                # Fallback: try to extract layer name
+                layer_name = key.rsplit('_', 2)[0]
+            
             if layer_name not in layer_weights:
                 layer_weights[layer_name] = []
             layer_weights[layer_name].append(weight_array.copy())

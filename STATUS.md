@@ -10,12 +10,12 @@
 
 ### Version History
 
-| Version  | Release Date | Status    | Key Features                                  |
-| -------- | ------------ | --------- | --------------------------------------------- |
-| **v2.2** | Feb 22, 2026 | ✅ Active | Admin review, Quality control, Client feedback|
-| **v2.1** | Feb 22, 2026 | ✅ Active | LoRA adapter for LLMs, Weight compression     |
-| **v2.0** | Feb 21, 2026 | ✅ Active | Async aggregation, Staleness handling         |
-| **v1.0** | Feb 20, 2026 | ✅ Active | Multi-framework FL, Trust scoring             |
+| Version  | Release Date | Status    | Key Features                                   |
+| -------- | ------------ | --------- | ---------------------------------------------- |
+| **v2.2** | Feb 22, 2026 | ✅ Active | Admin review, Quality control, Client feedback |
+| **v2.1** | Feb 22, 2026 | ✅ Active | LoRA adapter for LLMs, Weight compression      |
+| **v2.0** | Feb 21, 2026 | ✅ Active | Async aggregation, Staleness handling          |
+| **v1.0** | Feb 20, 2026 | ✅ Active | Multi-framework FL, Trust scoring              |
 
 ---
 
@@ -190,21 +190,21 @@ T=21s:  Admin downloads final model v6
 
 ## 🔧 API Endpoints (All Working)
 
-| Endpoint                                          | Method | Status | Purpose                       |
-| ------------------------------------------------- | ------ | ------ | ----------------------------- |
-| `/`                                               | GET    | ✅     | Service info                  |
-| `/health`                                         | GET    | ✅     | Health check                  |
-| `/experiment/create`                              | POST   | ✅     | Create experiment             |
-| `/experiment/{id}/status`                         | GET    | ✅     | Get experiment status         |
-| `/experiment/{id}/global-model`                   | GET    | ✅     | Download global model         |
-| `/experiment/{id}/submit-update`                  | POST   | ✅     | Submit client update          |
-| `/experiment/{id}/aggregate`                      | POST   | ✅     | Manual aggregation trigger    |
-| `/experiment/{id}/pending-reviews`                | GET    | ✅     | List updates awaiting review  |
-| `/experiment/{id}/update/{uid}/review`            | POST   | ✅     | Submit admin review           |
-| `/experiment/{id}/update/{uid}/review-status`     | GET    | ✅     | Check review status           |
-| `/experiment/{id}/client/{cid}/feedback`          | GET    | ✅     | Get all client feedback       |
-| `/experiment/{id}/update/{uid}/feedback`          | GET    | ✅     | Get update-specific feedback  |
-| `/docs`                          | GET    | ✅     | API documentation     |
+| Endpoint                                      | Method | Status | Purpose                      |
+| --------------------------------------------- | ------ | ------ | ---------------------------- |
+| `/`                                           | GET    | ✅     | Service info                 |
+| `/health`                                     | GET    | ✅     | Health check                 |
+| `/experiment/create`                          | POST   | ✅     | Create experiment            |
+| `/experiment/{id}/status`                     | GET    | ✅     | Get experiment status        |
+| `/experiment/{id}/global-model`               | GET    | ✅     | Download global model        |
+| `/experiment/{id}/submit-update`              | POST   | ✅     | Submit client update         |
+| `/experiment/{id}/aggregate`                  | POST   | ✅     | Manual aggregation trigger   |
+| `/experiment/{id}/pending-reviews`            | GET    | ✅     | List updates awaiting review |
+| `/experiment/{id}/update/{uid}/review`        | POST   | ✅     | Submit admin review          |
+| `/experiment/{id}/update/{uid}/review-status` | GET    | ✅     | Check review status          |
+| `/experiment/{id}/client/{cid}/feedback`      | GET    | ✅     | Get all client feedback      |
+| `/experiment/{id}/update/{uid}/feedback`      | GET    | ✅     | Get update-specific feedback |
+| `/docs`                                       | GET    | ✅     | API documentation            |
 
 ---
 

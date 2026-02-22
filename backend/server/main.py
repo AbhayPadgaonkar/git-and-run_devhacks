@@ -107,6 +107,20 @@ class GlobalModelResponse(BaseModel):
     timestamp: str
 
 
+class UpdateWeightsResponse(BaseModel):
+    """Response containing complete update weights for external hashing/verification"""
+    update_id: str
+    client_id: str
+    experiment_id: str
+    cluster_id: str
+    weights: str  # Base64 encoded delta weights
+    timestamp: str
+    base_version: int
+    staleness: int
+    trust_score: float
+    review_status: str
+
+
 # ============ API Endpoints ============
 
 @app.get("/")
@@ -797,7 +811,52 @@ def get_update_feedback(exp_id: str, update_id: str) -> ClientFeedbackItem:
     )
 
 
+# ============ WEIGHT FETCHING ENDPOINT ============
+
+@app.get("/experiment/{exp_id}/update/{update_id}/weights")
+def get_update_weights(exp_id: str, update_id: str) -> UpdateWeightsResponse:
+    """
+    Fetch complete weight data for a specific update
+    
+    This endpoint allows retrieving the exact weights submitted by a client.
+    The weights can be passed to external hash functions for verification.
+    """
+    if exp_id not in experiments:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    # Find update in pending_updates
+    update_data = None
+    for update in pending_updates.get(exp_id, []):
+        if update["update_id"] == update_id:
+            update_data = update
+            break
+    
+    if not update_data:
+        raise HTTPException(status_code=404, detail="Update not found")
+    
+    # Get review data for trust score
+    review = update_reviews.get(update_id, {})
+    
+    # Serialize weights for response
+    weights_serialized = serialize_weights(update_data["delta_weights"])
+    
+    return UpdateWeightsResponse(
+        update_id=update_id,
+        client_id=update_data["client_id"],
+        experiment_id=exp_id,
+        cluster_id=update_data["cluster_id"],
+        weights=weights_serialized,
+        timestamp=update_data["timestamp"],
+        base_version=update_data["base_version"],
+        staleness=update_data["staleness"],
+        trust_score=review.get("trust_score", 0.5),
+        review_status=update_data.get("review_status", "unknown")
+    )
+
+
 @app.get("/health")
+def health():
+    return {"status": "healthy"}
 def health():
     return {"status": "healthy"}
 
