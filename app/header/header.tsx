@@ -2,13 +2,21 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { auth, db } from "@/app/lib/firebase";
 import { signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  onSnapshot,
+} from "firebase/firestore";
 import { useAuth } from "@/app/context/AuthContext";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,9 +36,12 @@ import { Menu, Bell, FileUp, LogOut, User as UserIcon } from "lucide-react";
 export default function MainHeader() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const [initials, setInitials] = useState<string>("?");
   const [fullName, setFullName] = useState<string>("User");
+  const [userRole, setUserRole] = useState<string>("");
+  const [pendingInvitationsCount, setPendingInvitationsCount] = useState(0);
 
   // Fetch User Data from Firestore for Initials and Name
   useEffect(() => {
@@ -46,6 +57,7 @@ export default function MainHeader() {
             const lName = data.lastName || "";
 
             setFullName(`${fName} ${lName}`.trim());
+            setUserRole(data.role || "");
 
             // Get first letter of first name and last name
             const init = `${fName.charAt(0)}${lName.charAt(0)}`.toUpperCase();
@@ -59,6 +71,24 @@ export default function MainHeader() {
 
     fetchUserData();
   }, [user]);
+
+  // Listen for pending invitations in real-time
+  useEffect(() => {
+    if (user?.email && userRole === "client") {
+      const invitationsRef = collection(db, "invitations");
+      const q = query(
+        invitationsRef,
+        where("clientEmail", "==", user.email),
+        where("status", "==", "pending"),
+      );
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setPendingInvitationsCount(snapshot.size);
+      });
+
+      return () => unsubscribe();
+    }
+  }, [user?.email, userRole]);
 
   const handleSignOut = async () => {
     try {
@@ -120,15 +150,27 @@ export default function MainHeader() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="hover:bg-primary/10"
+                      className="hover:bg-primary/10 relative"
                       asChild
                     >
                       <Link href="/notifications">
                         <Bell className="h-5 w-5" />
+                        {pendingInvitationsCount > 0 && (
+                          <Badge
+                            variant="destructive"
+                            className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                          >
+                            {pendingInvitationsCount}
+                          </Badge>
+                        )}
                       </Link>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Notifications</TooltipContent>
+                  <TooltipContent side="bottom">
+                    {pendingInvitationsCount > 0
+                      ? `${pendingInvitationsCount} pending invitation${pendingInvitationsCount > 1 ? "s" : ""}`
+                      : "Notifications"}
+                  </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
